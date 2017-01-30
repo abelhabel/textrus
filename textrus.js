@@ -1,4 +1,5 @@
 window.addEventListener('load', function() {
+
   function make(tag, name) {
     var d = document.createElement(tag);
     if(name) {
@@ -9,13 +10,17 @@ window.addEventListener('load', function() {
   }
 
   function MainView(o) {
+    var mv = this;
     var container = make('div', '#main-view');
     var title = make('div', '.title');
     var body = make('div', '.body');
-    body.contentEditable = true;
+    var exportText = make('div', '.button');
+    exportText.innerText = 'Export';
+    body.contentEditable = false;
     title.textContent = 'You see:';
     container.appendChild(title);
     container.appendChild(body);
+    container.appendChild(exportText);
     document.body.appendChild(container);
 
     this.tags = function() {
@@ -25,20 +30,56 @@ window.addEventListener('load', function() {
         body: body
       }
     }
+    this.mode = 'off';
+    listen(mv, body, 'keyup', 'innerHTML', this.setBody.bind(this));
 
-    listen(body, 'keyup', 'textContent', this.setBody.bind(this));
-  }
-
-  function listen(tag, event, key, fn) {
-    tag.addEventListener(event, function(e) {
-      console.log(e)
-      // fn(e.target[key]);
+    exportText.addEventListener('click', function() {
+      console.log(body.innerText);
     })
   }
 
-  MainView.prototype.setBody = function(val) {
-    this.body = val;
-    return this;
+  function listen(caller, tag, event, key, fn) {
+    tag.addEventListener(event, function(e) {
+      fn.call(caller, e, e.target[key]);
+    })
+  }
+
+  window.addEventListener('keyup', function(e) {
+    var body = mainView.tags().body;
+    if(e.key == 'Enter' && mainView.mode != 'edit') {
+      mainView.mode = 'edit';
+      body.contentEditable = true;
+      body.focus();
+      var range = document.createRange();
+      var sel = window.getSelection();
+      console.log(mainView.selection);
+      if(mainView.selection) {
+        range.setStart(mainView.selection.child, mainView.selection.baseOffset);
+      } else {
+        range.setStart(body,0);
+      }
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      console.log(sel);
+    }
+    if(e.key == 'Escape') {
+      mainView.mode = 'off';
+      body.contentEditable = false;
+    }
+  })
+
+  MainView.prototype.setBody = function(e, val) {
+    if(this.mode == 'edit') {
+      this.body = val;
+      console.log(window.getSelection())
+      var sel = window.getSelection();
+      this.selection = {
+        baseOffset: sel.baseOffset,
+        child: sel.focusNode.parentNode
+      }
+      return this;
+    }
   }
 
   MainView.prototype.render = function(part) {
@@ -81,9 +122,10 @@ window.addEventListener('load', function() {
 
     }
 
-    var text = wrapText(mainView.body, view.name);
-    console.log(text);
-    mainView.tags().body.innerHTML = text;
+    Object.keys(ControlPanel.views).forEach(function(key) {
+      mainView.body = wrapText(mainView.body, ControlPanel.views[key].name);
+    })
+    mainView.tags().body.innerHTML = mainView.body;
     this.renderView(name);
   }
 
@@ -102,7 +144,7 @@ window.addEventListener('load', function() {
       row.value.appendChild(create.option(s));
     });
 
-    listen(row.value, 'change', 'value', function(val) {
+    listen(this, row.value, 'change', 'value', function(val) {
       view.sense = val;
       console.log(view);
     })
@@ -151,34 +193,11 @@ window.addEventListener('load', function() {
   }
 
   function wrapText(text, word, className) {
-    var out = '', l = word.length;
-    var m = new RegExp(word, 'g');
-    var r = text.match(m);
-
-    // console.log(r);
-    // console.log(text.indexOf(word))
-    var w = '';
-    for(var i = 0; i < text.length; i += 1)  {
-      w = text.substr(i, l)
-      console.log('params', w, i, l)
-      if(w != word
-        || i && text.charAt(i -1) != ' '
-        || (i + l != text.length && !text.charAt(i + l -1).match(/[a-zA-Z0-9]/))
-      ) {
-        out += text.charAt(i);
-        continue;
-      }
-      console.log('match')
-      out += wrap(word);
-      i += l -1;
-
-    }
-
-    return out;
+    var reg = new RegExp("([>\\s]|^)("+word+")([<\\s]|$)", 'g');
+    return text.replace(reg, "$1" + wrap(word) + "$3");
   }
 
   window.addEventListener('click', function(e) {
-    console.log(e);
     if(e.target.classList.contains('view-text')) {
       settings.renderView(e.target.textContent);
     }
@@ -187,7 +206,6 @@ window.addEventListener('load', function() {
   mainView.tags().body.addEventListener('mouseup', function() {
     var selection = window.getSelection().toString();
     if(!selection.toString()) return;
-    console.log(selection);
     settings.createView(selection);
 
   })
