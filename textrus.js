@@ -72,7 +72,6 @@ window.addEventListener('load', function() {
   MainView.prototype.setBody = function(e, val) {
     if(this.mode == 'edit') {
       this.body = val;
-      console.log(window.getSelection())
       var sel = window.getSelection();
       this.selection = {
         baseOffset: sel.baseOffset,
@@ -82,8 +81,22 @@ window.addEventListener('load', function() {
     }
   }
 
-  MainView.prototype.render = function(part) {
-    this.tags()[part].innerHTML = this.body;
+  MainView.prototype.render = function() {
+    var mv = this;
+    Object.keys(ControlPanel.views).forEach(function(key) {
+      console.log(key)
+      mv.body = wrapText(mv.body, ControlPanel.views[key].name);
+    })
+    console.log('rerendering mainview', mainView)
+    mainView.tags().body.innerHTML = mainView.body;
+  }
+
+  MainView.prototype.remove = function(viewName) {
+    console.log(this.body)
+    this.body = unwrapText(this.body, '');
+    this.body = unwrapText(this.body, viewName);
+    console.log('removed', viewName, this.body);
+    this.tags().body.innerHTML = this.body;
   }
 
   function MainInput(o) {
@@ -97,7 +110,11 @@ window.addEventListener('load', function() {
 
   function View(name) {
     this.name = name;
-    this.sense = 'visual';
+    this.senses = {
+      visual: '',
+      audial: '',
+      tactile: ''
+    };
     this.on = {};
   }
 
@@ -122,36 +139,37 @@ window.addEventListener('load', function() {
 
     }
 
-    Object.keys(ControlPanel.views).forEach(function(key) {
-      mainView.body = wrapText(mainView.body, ControlPanel.views[key].name);
-    })
-    mainView.tags().body.innerHTML = mainView.body;
+
     this.renderView(name);
   }
 
   ControlPanel.prototype.renderView = function(viewName) {
+    var cp = this;
     var c = this.tags().container;
     c.innerHTML = '';
     var view = ControlPanel.views[viewName];
-    var name = make('div', '.label');
-    name.textContent = view.name;
-    var sense = make('div', '.label');
-    sense.textContent = view.sense;
+    var name = create.row('Name');
+    var remove = make('div', '.button');
+    remove.textContent = 'Delete';
+    name.value.textContent = viewName;
 
-    var row = create.row('on', 'select');
-    ['visual', 'audial', 'tactile']
+    var sensorySection = create.section('Senses');
+    Object.keys(view.senses)
     .forEach(function(s) {
-      row.value.appendChild(create.option(s));
+      var row = create.row(s, 'textarea');
+      row.value.value = view.senses.visual;
+      sensorySection.body.appendChild(row.row);
     });
 
-    listen(this, row.value, 'change', 'value', function(val) {
-      view.sense = val;
-      console.log(view);
+    remove.addEventListener('click', function() {
+      delete ControlPanel.views[viewName];
+      c.innerHTML = '';
+      mainView.remove(viewName);
     })
 
-    c.appendChild(name);
-    c.appendChild(sense);
-    c.appendChild(row.row);
+    c.appendChild(name.row);
+    c.appendChild(sensorySection.container);
+    c.appendChild(remove);
 
   }
 
@@ -174,6 +192,20 @@ window.addEventListener('load', function() {
       o.value = val;
       o.innerHTML = val;
       return o;
+    },
+    section: function(title) {
+      var c = make('div', '.controlpanel-section');
+      var t = make('div', '.controlpanel-title');
+      var b = make('div', '.controlpanel-body');
+      c.appendChild(t);
+      c.appendChild(b);
+      t.textContent = title || '';
+
+      return {
+        container: c,
+        title: t,
+        body: b
+      }
     }
   }
 
@@ -192,6 +224,11 @@ window.addEventListener('load', function() {
     return "<span class='view-text'>" + w + "</span>";
   }
 
+  function unwrapText(text, word, className) {
+    var reg = new RegExp("<span class='view-text'>"+ word +"</span>", 'g');
+    return text.replace(reg, word);
+  }
+
   function wrapText(text, word, className) {
     var reg = new RegExp("([>\\s]|^)("+word+")([<\\s]|$)", 'g');
     return text.replace(reg, "$1" + wrap(word) + "$3");
@@ -205,9 +242,10 @@ window.addEventListener('load', function() {
 
   mainView.tags().body.addEventListener('mouseup', function() {
     var selection = window.getSelection().toString();
-    if(!selection.toString()) return;
-    settings.createView(selection);
-
+    if(!selection) return;
+    settings.createView(selection.trim());
+    mainView.render();
+    console.log(mainView.body)
   })
 
 
